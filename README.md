@@ -378,6 +378,103 @@ sudo apt install libreoffice
 python ai_operator.py
 ```
 
+## ⚡ Quick tools added
+
+### Cross-platform direct file search (safe, fast)
+If you just want to search the filesystem for a filename (for example "obed") without using the premium indexer, there's a lightweight CLI and helper utility included.
+
+Example:
+```bash
+# search for files or folders containing 'obed' (auto-detects root folders)
+python run_search.py --name obed
+
+# search from a specific path
+python run_search.py --name obed --root /home/youruser --max 100
+
+# get JSON output to pipe into other tools
+python run_search.py --name obed --json
+```
+
+Programmatically (REPL):
+```python
+from search_utils import find_files_by_name
+matches = find_files_by_name('obed', max_results=100)
+print(matches)
+```
+
+This search will safely skip permission errors and limit results so it won't freeze your machine.
+
+### Auto-setup installer (one-command environment setup)
+We added an `auto_setup.py` script that detects your OS, creates a virtual environment, and installs Python dependencies for you. On Linux you can optionally ask it to install recommended system packages (requires sudo).
+
+Examples:
+```bash
+# create a venv and install python requirements
+python auto_setup.py
+
+# create venv, install python requirements and attempt system-level packages on Debian/Ubuntu (requires sudo)
+python auto_setup.py --install-system
+
+# install into your current environment instead of creating venv
+python auto_setup.py --no-venv
+```
+
+Notes:
+- Installing system packages (`--install-system`) uses `apt` and requires sudo on Linux; the script will provide safe instructions if it can't run them automatically.
+- On Windows, the script will install Python packages via pip; system-level packages (like LibreOffice) can be installed by the user via `winget` or `choco` (the script prints suggested commands).
+
+### Single-file, one-click binaries (Windows and Linux)
+
+We provide an entry point `entry_point.py` and a simple build helper `build_package.py` so you can create a single-file executable using PyInstaller.
+
+Important:
+- You should build the binary on the target operating system for best compatibility (i.e. build on Windows to create a .exe, build on Linux to create a Linux ELF binary). Cross-building is possible with extra tooling but outside the scope of this script.
+- The PyInstaller-built binary bundles Python and the Python-level dependencies so your friend does not need to install the Python packages or venv. System-level tools (e.g., LibreOffice, scrot) cannot be bundled and may still be required for some features.
+
+Build example (on the OS you want the binary for):
+
+```bash
+# install build-time dependencies (on build machine)
+pip install -r requirements.txt
+
+# produce a single-file binary
+python3 build_package.py --entry entry_point.py --output build --name DesktopAI
+
+# produced artifact will be in ./build/DesktopAI (or DesktopAI.exe on Windows)
+```
+
+### One-click GUI installer (for non-technical users)
+
+If you want a very easy install path for friends who are not comfortable with terminals, there's a tiny GUI installer included:
+
+```bash
+python3 gui_installer.py
+```
+
+This opens a simple installer window where users can pick to create a virtualenv and install Python dependencies. On Linux it optionally installs a small set of recommended system packages (prompts before doing so).
+
+
+If you want cross-platform builds or CI to automatically produce binaries for Windows + Linux, consider using GitHub Actions or a builder that runs on both targets (recommended).
+
+### AI-powered smart search
+
+We've added an AI-assisted search helper (`ai_search.py`) that ranks results using fuzzy matching plus recency/context boosts from the system index. It makes the assistant "smarter" at finding the right file quickly.
+
+Features:
+- Fuzzy filename matching (tolerates typos and partial names)
+- Boosting of recently used files (uses the app's access history when available)
+- Falls back to a fast direct filesystem scan when the index is missing or results are sparse
+
+Try it from the GUI: open the app and click "Smart Search" or using the CLI/entry point:
+
+```bash
+# CLI (uses AI ranking if available)
+python3 entry_point.py --cli --search "obed" --max 200
+
+# Direct AI search (debugging)
+python3 ai_search.py --q obed --max 200
+```
+
 ## Usage Examples
 
 ### Navigation Commands
