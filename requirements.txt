@@ -62,3 +62,6 @@ hashlib  # File hashing for duplicates
 
 # File encryption butler dependencies
 cryptography==41.0.7  # AES-256 encryption
+
+# Packaging tools (optional) - used to create single-file executables
+pyinstaller==5.13.0
