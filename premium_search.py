@@ -5,6 +5,11 @@ import sqlite3
 import hashlib
 from datetime import datetime, timedelta
 from pathlib import Path
+from search_utils import find_files_by_name
+try:
+    from ai_search import smart_search as ai_smart_search
+except Exception:
+    ai_smart_search = None
 import mimetypes
 import threading
 import time
@@ -741,3 +746,29 @@ def index_files_for_search():
 def record_file_access(file_path, access_type='opened'):
     """Record file access for tracking"""
     return premium_search.record_file_access(file_path, access_type)
+
+
+def find_files_direct(name, root_paths=None, max_results: int = 500, case_sensitive: bool = False):
+    """Simple direct filesystem search (no indexing) - convenient when you need an immediate scan.
+
+    This is useful if the index hasn't been built or you want a quick ad-hoc search.
+    """
+    try:
+        return find_files_by_name(name, root_paths=root_paths, max_results=max_results, case_sensitive=case_sensitive)
+    except Exception as e:
+        return []
+
+
+def find_files_smart(query, max_results: int = 200, use_index: bool = True, roots=None):
+    """AI-assisted smart search wrapper exposed to other modules.
+
+    Returns a list of (path, score) tuples ordered by descending relevance.
+    """
+    try:
+        if ai_smart_search:
+            return ai_smart_search(query, max_results=max_results, use_index=use_index, roots=roots)
+        # Fallback to direct search if AI search not available
+        direct = find_files_direct(query, root_paths=roots, max_results=max_results)
+        return [(p, 0) for p in direct]
+    except Exception:
+        return []
