@@ -416,7 +416,40 @@ def parse_command(user_input):
         name = extract_name(user_input, action)
         if name:
             # Check if recursive search is requested
-            recursive = any(word in user_input.lower() for word in ["everywhere", "all", "recursive", "subfolder"])
+            lower = user_input.lower()
+            recursive = any(word in lower for word in ["everywhere", "all", "recursive", "subfolder"])
+
+            # Detect explicit system-wide search requests
+            system_wide_phrases = [
+                "whole system",
+                "entire system",
+                "entire filesystem",
+                "whole filesystem",
+                "search the system",
+                "search the whole system",
+                "scan entire",
+                "search /",
+                "scan /",
+                # additional natural phrases / synonyms
+                "all drives",
+                "everywhere",
+                "across all drives",
+                "across drives",
+                "across filesystem",
+                "search all drives",
+                "search entire disk",
+                "search entire drive",
+                "search root",
+                "scan the disk",
+                "scan the whole drive",
+            ]
+
+            system_wide = any(phrase in lower for phrase in system_wide_phrases)
+
+            if system_wide:
+                # special command to indicate a system-wide scan
+                return "search files system", name, True
+
             return "search files", name, recursive
         else:
             return None, None, None
