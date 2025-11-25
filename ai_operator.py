@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox, scrolledtext
+from tkinter import messagebox, scrolledtext, simpledialog
 from folder_ops import *
 from system_ops import *
 from browser_ops import *
@@ -191,12 +191,63 @@ def execute_command():
             result = move_file(param1, param2)
         elif command == "rename file":
             result = rename_file(param1, param2)
+        elif command == "search files system":
+            # System-wide search (may require permissions) — uses direct filesystem scan
+            try:
+                # Use AI smart search first if available; provides ranking and context boosts
+                try:
+                    ai_results = find_files_smart(param1, max_results=1000)
+                    if ai_results:
+                        # ai_results is list of (path, score) or paths depending on wrapper
+                        if all(isinstance(x, tuple) for x in ai_results):
+                            results = [p for p, s in ai_results]
+                        else:
+                            results = ai_results
+                    else:
+                        results = find_files_direct(param1, max_results=1000)
+                except Exception:
+                    results = find_files_direct(param1, max_results=1000)
+                if not results:
+                    result = f"No files found matching '{param1}' across the system"
+                else:
+                    # Trim output to avoid huge responses
+                    shown = results[:250]
+                    result = f"System-wide search found {len(results)} matches (showing {len(shown)}):\n" + "\n".join(shown)
+            except Exception as e:
+                result = f"Error performing system-wide search: {e}"
+
         elif command == "search files":
             files = search_files(param1, param2 if param2 else False)
+
+            # If the local search returns a message (no matches) and the user asked
+            # for a recursive or system-wide search, automatically escalate to a
+            # direct system-level scan (safe-limited) so the assistant is smarter.
             if isinstance(files, list):
                 result = f"Found files matching '{param1}':\n" + "\n".join(files)
             else:
-                result = files
+                # files is a message (no matches) — escalate when recursive requested
+                lower_msg = str(files).lower()
+                if param2:
+                    try:
+                        # Try AI smart search when local search returned no matches
+                        ai_results = find_files_smart(param1, max_results=500)
+                        if ai_results:
+                            if all(isinstance(x, tuple) for x in ai_results):
+                                results = [p for p, s in ai_results]
+                            else:
+                                results = ai_results
+                        else:
+                            results = find_files_direct(param1, max_results=500)
+
+                        if results:
+                            shown = results[:200]
+                            result = f"No local matches; performed a system-wide scan and found {len(results)} matches (showing {len(shown)}):\n" + "\n".join(shown)
+                        else:
+                            result = files
+                    except Exception as e:
+                        result = f"No local matches and system-wide scan failed: {e}"
+                else:
+                    result = files
         
         # System operations
         elif command == "check storage":
@@ -682,6 +733,31 @@ def execute_command():
     # Clear input
     command_entry.delete(0, tk.END)
 
+
+def smart_search_dialog():
+    """GUI helper to prompt for an AI-powered smart search and show results."""
+    query = simpledialog.askstring('Smart Search', 'Search for (e.g. \"obed\") — this will use AI ranking and context:')
+    if not query:
+        return
+
+    try:
+        results = find_files_smart(query, max_results=300)
+        # normalize results to list of (path, score) pairs
+        if not results:
+            show_result(f"No results found for '{query}'")
+            return
+
+        if all(isinstance(x, tuple) for x in results):
+            lines = [f"{i+1}. {p}  (score: {s})" for i, (p, s) in enumerate(results[:200])]
+        else:
+            # maybe returned list of paths
+            lines = [f"{i+1}. {p}" for i, p in enumerate(results[:200])]
+
+        out = f"AI Smart Search results for '{query}':\n\n" + "\n".join(lines)
+        show_result(out)
+    except Exception as e:
+        show_result(f"Smart search failed: {e}")
+
 def show_result(result):
     """Show result in a scrollable text window"""
     result_window = tk.Toplevel(root)
@@ -701,58 +777,65 @@ def update_location_display():
     current_location = get_current_location()
     location_label.config(text=current_location)
 
-# GUI setup
-root = tk.Tk()
-root.title("Desktop AI System Manager")
-root.geometry("700x400")
+def start_gui():
+    """Start the Desktop AI GUI. This function allows packaging tools or CLI code
+    to import ai_operator without launching the GUI immediately.
+    """
+    global root, location_label, command_entry
 
-# Current location display
-location_frame = tk.Frame(root)
-location_frame.pack(pady=10, padx=10, fill='x')
+    # GUI setup
+    root = tk.Tk()
+    root.title("Desktop AI System Manager")
+    root.geometry("700x400")
 
-tk.Label(location_frame, text="Current Location:", font=("Arial", 10, "bold")).pack(side='left')
-location_label = tk.Label(location_frame, text="Loading...", font=("Arial", 10), fg="blue")
-location_label.pack(side='left', padx=(10, 0))
+    # Current location display
+    location_frame = tk.Frame(root)
+    location_frame.pack(pady=10, padx=10, fill='x')
 
-# Command input
-command_frame = tk.Frame(root)
-command_frame.pack(pady=20, padx=10, fill='x')
+    tk.Label(location_frame, text="Current Location:", font=("Arial", 10, "bold")).pack(side='left')
+    location_label = tk.Label(location_frame, text="Loading...", font=("Arial", 10), fg="blue")
+    location_label.pack(side='left', padx=(10, 0))
 
-tk.Label(command_frame, text="Type a command:", font=("Arial", 12)).pack()
-command_entry = tk.Entry(command_frame, width=70, font=("Arial", 11))
-command_entry.pack(pady=10)
-command_entry.bind('<Return>', lambda event: execute_command())
+    # Command input
+    command_frame = tk.Frame(root)
+    command_frame.pack(pady=20, padx=10, fill='x')
 
-# Buttons
-button_frame = tk.Frame(root)
-button_frame.pack(pady=10)
+    tk.Label(command_frame, text="Type a command:", font=("Arial", 12)).pack()
+    command_entry = tk.Entry(command_frame, width=70, font=("Arial", 11))
+    command_entry.pack(pady=10)
+    command_entry.bind('<Return>', lambda event: execute_command())
 
-tk.Button(button_frame, text="Execute", command=execute_command, bg="#4CAF50", fg="white", font=("Arial", 10, "bold")).pack(side='left', padx=5)
-tk.Button(button_frame, text="Where Am I?", command=lambda: show_result(get_current_location()), bg="#2196F3", fg="white").pack(side='left', padx=5)
-tk.Button(button_frame, text="Go Back", command=lambda: (go_back(), update_location_display()), bg="#FF9800", fg="white").pack(side='left', padx=5)
-tk.Button(button_frame, text="System Info", command=lambda: show_result(get_system_info()), bg="#9C27B0", fg="white").pack(side='left', padx=5)
-tk.Button(button_frame, text="Screenshot", command=lambda: show_result(take_screenshot()), bg="#607D8B", fg="white").pack(side='left', padx=5)
+    # Buttons
+    button_frame = tk.Frame(root)
+    button_frame.pack(pady=10)
 
-# Second row of buttons for new features
-button_frame2 = tk.Frame(root)
-button_frame2.pack(pady=5)
+    tk.Button(button_frame, text="Execute", command=execute_command, bg="#4CAF50", fg="white", font=("Arial", 10, "bold")).pack(side='left', padx=5)
+    tk.Button(button_frame, text="Where Am I?", command=lambda: show_result(get_current_location()), bg="#2196F3", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame, text="Go Back", command=lambda: (go_back(), update_location_display()), bg="#FF9800", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame, text="System Info", command=lambda: show_result(get_system_info()), bg="#9C27B0", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame, text="Screenshot", command=lambda: show_result(take_screenshot()), bg="#607D8B", fg="white").pack(side='left', padx=5)
 
-tk.Button(button_frame2, text="Open Gmail", command=lambda: show_result(open_gmail("firefox")), bg="#DB4437", fg="white").pack(side='left', padx=5)
-tk.Button(button_frame2, text="Create Document", command=lambda: show_result(create_word_document()), bg="#4285F4", fg="white").pack(side='left', padx=5)
-tk.Button(button_frame2, text="List Documents", command=lambda: show_result(list_documents()), bg="#34A853", fg="white").pack(side='left', padx=5)
-tk.Button(button_frame2, text="List Browsers", command=lambda: show_result(list_browsers()), bg="#FF6D01", fg="white").pack(side='left', padx=5)
-tk.Button(button_frame2, text="Check Dependencies", command=lambda: show_result(check_dependencies()), bg="#673AB7", fg="white").pack(side='left', padx=5)
+    # Second row of buttons for new features
+    button_frame2 = tk.Frame(root)
+    button_frame2.pack(pady=5)
 
-# Examples
-examples_frame = tk.Frame(root)
-examples_frame.pack(pady=20, padx=10, fill='both', expand=True)
+    tk.Button(button_frame2, text="Open Gmail", command=lambda: show_result(open_gmail("firefox")), bg="#DB4437", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame2, text="Create Document", command=lambda: show_result(create_word_document()), bg="#4285F4", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame2, text="List Documents", command=lambda: show_result(list_documents()), bg="#34A853", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame2, text="List Browsers", command=lambda: show_result(list_browsers()), bg="#FF6D01", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame2, text="Check Dependencies", command=lambda: show_result(check_dependencies()), bg="#673AB7", fg="white").pack(side='left', padx=5)
+    tk.Button(button_frame2, text="Smart Search", command=smart_search_dialog, bg="#1976D2", fg="white").pack(side='left', padx=5)
 
-tk.Label(examples_frame, text="Example Commands:", font=("Arial", 11, "bold")).pack(anchor='w')
+    # Examples
+    examples_frame = tk.Frame(root)
+    examples_frame.pack(pady=20, padx=10, fill='both', expand=True)
 
-examples_text = scrolledtext.ScrolledText(examples_frame, height=8, width=80, font=("Arial", 9))
-examples_text.pack(fill='both', expand=True, pady=5)
+    tk.Label(examples_frame, text="Example Commands:", font=("Arial", 11, "bold")).pack(anchor='w')
 
-examples = """• Navigation:
+    examples_text = scrolledtext.ScrolledText(examples_frame, height=8, width=80, font=("Arial", 9))
+    examples_text.pack(fill='both', expand=True, pady=5)
+
+    examples = """• Navigation:
   - "go to documents" or "navigate to desktop"
   - "go back" or "return"
   - "where am i?" or "current location"
@@ -789,12 +872,16 @@ examples = """• Navigation:
 • Typo Tolerance:
   - "chck storge" → Checks storage
   - "opn gmail" → Opens Gmail
-  - "crete documnt" → Creates document"""
+    - "crete documnt" → Creates document"""
 
-examples_text.insert(tk.END, examples)
-examples_text.config(state=tk.DISABLED)
+    examples_text.insert(tk.END, examples)
+    examples_text.config(state=tk.DISABLED)
 
-# Initialize location display
-update_location_display()
+    # Initialize location display
+    update_location_display()
 
-root.mainloop()
+    root.mainloop()
+
+
+if __name__ == '__main__':
+    start_gui()
