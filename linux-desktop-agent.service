@@ -1,0 +1,30 @@
+[Unit]
+Description=Linux Desktop AI Agent
+Documentation=file:///home/muthoni/DesktopAI/README_LINUX.md
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=muthoni
+WorkingDirectory=/home/muthoni/DesktopAI
+ExecStart=/usr/bin/python3 /home/muthoni/DesktopAI/linux_desktop_agent.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=linux-desktop-agent
+
+# Security settings
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=partial
+ProtectHome=yes
+ReadWritePaths=/tmp /home/muthoni/.config/linux-desktop-agent
+
+# Resource limits
+MemoryLimit=512M
+CPUQuota=50%
+
+[Install]
+WantedBy=multi-user.target
